@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+.env.local
+
+# HuggingFace model cache
+.hf_cache/
+.hf_home/
+
+# Data and databases
+data/chroma_db/
+data/sessions.db
+data/bm25_index.pkl
+data/test_chroma/
+data/test2/
+
+# Logs
+*.log
+uvicorn_out.txt
+uvicorn_err.txt
+nextjs_out.txt
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
+
+# VS Code
+.vscode/settings.json
+.vscode/launch.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test artifacts
+htmlcov/
+.coverage
+
+# ML model files
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Temp files
+*.tmp
+*.temp

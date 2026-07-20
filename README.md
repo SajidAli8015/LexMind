@@ -1,0 +1,334 @@
+# LexMind
+
+> AI-powered legal research assistant. Upload legal documents, ask questions in plain English, and get grounded answers with article citations — every claim verified before it reaches you.
+
+![Python](https://img.shields.io/badge/Python-3.11+-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+![LangGraph](https://img.shields.io/badge/LangGraph-0.2-orange)
+![Tests](https://img.shields.io/badge/Tests-86%20passing-brightgreen)
+
+---
+
+## What Is LexMind?
+
+LexMind is a multi-agent AI system for legal document research.
+You upload a contract, law, or any legal document. You ask a question.
+Four specialized AI agents work in sequence to find the most relevant
+sections, generate a grounded answer, and verify its quality before
+returning it to you.
+
+Every answer:
+- Is grounded **strictly** in the uploaded document — no hallucination
+- Cites the exact article number for every claim
+- Is scored on groundedness, citation accuracy, and relevance
+- Can reference previous questions in the same research session
+
+---
+
+## Demo
+
+| Step | What Happens |
+|---|---|
+| Upload | Drop a PDF contract onto the upload page |
+| Ingest | System parses, chunks by article, embeds, stores in ChromaDB |
+| Ask | Type a question in the Research page |
+| Retrieve | Hybrid dense + BM25 search finds top 5 relevant chunks |
+| Reason | LLM generates a cited answer using only those chunks |
+| Verify | Critic agent scores the answer — rejects if below threshold |
+| Return | Grounded answer with citations and quality scores displayed |
+
+---
+
+## Architecture
+
+### Ingestion Pipeline — 5 Stations
+
+A raw document enters one end. A searchable knowledge base comes out the other.
+
+```
+Raw Document (PDF / DOCX / TXT)
+        ↓
+Station 1 — Parser
+        Reads the file. Identifies structure.
+        Labels each line as heading (level 1/2/3) or paragraph.
+        ↓
+Station 2 — Chunker
+        Groups elements by article boundary.
+        Article 47 and all its sub-clauses stay together in one chunk.
+        ↓
+Station 3 — Embedder
+        Converts each chunk to a 1024-dimensional vector using E5-large.
+        passage: prefix for chunks. query: prefix for search queries.
+        ↓
+Station 4 — Vector Store
+        Stores vectors + text + metadata permanently in ChromaDB on disk.
+        Embed once. Search forever.
+        ↓
+Station 5 — Pipeline
+        Orchestrates all 4 stations in a single ingest_document() call.
+        ↓
+Knowledge Base — searchable, persistent, never re-embedded
+```
+
+### Query Pipeline — 4 Agents
+
+Four agents run in sequence for every question.
+
+```
+User Question
+        ↓
+Orchestrator Agent
+        Classifies the query type:
+        factual | analytical | comparison | summarisation
+        Selects the right retrieval strategy and prompt template.
+        ↓
+Retrieval Agent
+        Step 1: Dense search via ChromaDB (semantic similarity)
+        Step 2: BM25 keyword search (exact term matching)
+        Step 3: Merge + deduplicate (up to 40 candidates)
+        Step 4: Cross-encoder reranking → top 5 chunks returned
+        ↓
+Reasoning Agent
+        Formats chunks as context.
+        Calls LLM with grounding prompt (citations required, no external knowledge).
+        Parses citations from the response.
+        ↓
+Critic Agent
+        Scores the answer on three dimensions (0.0–1.0 each):
+          Groundedness   — is every claim supported by a chunk?
+          Citation Accuracy — are the article numbers correct?
+          Relevance      — does the answer address the question?
+        If any score is below threshold → reject and regenerate (max 2 times).
+        ↓
+Final Answer — grounded, cited, quality-verified
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Embeddings | intfloat/multilingual-e5-large | 1024-dim vectors, 93 languages, runs locally — no API cost |
+| Vector DB | ChromaDB | Persistent on-disk vector storage and similarity search |
+| Keyword Search | rank-bm25 | BM25 keyword search for exact term matching |
+| Reranking | cross-encoder/ms-marco-MiniLM-L-6-v2 | Reranks top-40 candidates to select best 5 |
+| Agent Framework | LangGraph | Multi-agent graph with conditional routing and shared state |
+| LLM | Google Gemini / OpenAI / Anthropic | Configurable via .env |
+| Backend | FastAPI + SQLAlchemy | REST API with Pydantic validation and Swagger docs |
+| Database | SQLite | Persistent chat sessions and message history |
+| Frontend | Next.js 16 + TypeScript + Tailwind CSS | React application |
+
+---
+
+## Project Structure
+
+```
+LexMind/
+├── src/
+│   ├── ingestion/
+│   │   ├── parser.py              # PDF/DOCX/TXT parser with heading detection
+│   │   ├── chunker.py             # Legal-aware article-boundary chunker
+│   │   ├── embedder.py            # E5-large embedder with lazy loading
+│   │   ├── vector_store.py        # ChromaDB wrapper with similarity search
+│   │   └── ingestion_pipeline.py  # Orchestrates all 4 stations in one call
+│   ├── agents/
+│   │   ├── orchestrator.py        # Query type classification
+│   │   ├── retrieval_agent.py     # Hybrid dense+BM25 search + cross-encoder
+│   │   ├── reasoning_agent.py     # Grounded answer generation
+│   │   └── critic_agent.py        # Quality scoring and rejection loop
+│   ├── graph/
+│   │   ├── state.py               # LexMindState TypedDict (shared agent state)
+│   │   └── graph.py               # LangGraph wiring and run_query()
+│   ├── api/
+│   │   ├── main.py                # FastAPI app, CORS, startup events
+│   │   ├── schemas.py             # Pydantic request/response models
+│   │   └── routes/                # ingest, query, documents, sessions routers
+│   └── db/
+│       ├── database.py            # SQLAlchemy engine and session factory
+│       └── models.py              # Session and Message ORM models
+├── tests/
+│   ├── ingestion/                 # 44 tests
+│   └── agents/                    # 42 tests
+├── frontend/                      # Next.js application
+├── data/                          # ChromaDB, BM25 index, SQLite sessions (gitignored)
+├── docs/                          # Reference and planning documents
+├── .env.example                   # Environment variable template
+├── pyproject.toml                 # Python package configuration
+└── requirements.txt
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- A virtual environment set up at `venv/`
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/yourusername/LexMind.git
+cd LexMind
+cp .env.example .env
+```
+
+Edit `.env` and add your LLM credentials:
+
+```env
+LLM_PROVIDER=google
+GOOGLE_API_KEY=your_key_here
+```
+
+### 2. Install Python dependencies
+
+```bash
+python -m venv venv
+.\venv\Scripts\activate        # Windows
+pip install -r requirements.txt
+pip install -e .
+```
+
+### 3. Install frontend dependencies
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 4. Start the backend
+
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
+
+- API: http://localhost:8000
+- Swagger UI: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
+
+### 5. Start the frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open http://localhost:3000
+
+> **Important:** Always stop uvicorn with Ctrl+C before closing the terminal.
+> Closing the window without Ctrl+C leaves orphan processes holding port 8000.
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| LLM_PROVIDER | google | LLM provider: google, openai, anthropic, azure |
+| GOOGLE_API_KEY | — | Google Gemini API key |
+| OPENAI_API_KEY | — | OpenAI API key (if using OpenAI) |
+| ANTHROPIC_API_KEY | — | Anthropic API key (if using Anthropic) |
+| EMBEDDING_MODEL | intfloat/multilingual-e5-large | HuggingFace embedding model |
+| EMBEDDING_DEVICE | cpu | cpu, cuda, or mps |
+| CHUNK_SIZE | 1500 | Max characters per chunk before splitting |
+| TOP_K_FINAL | 5 | Final chunks returned after reranking |
+| GROUNDEDNESS_THRESHOLD | 0.75 | Minimum groundedness score to pass |
+| CITATION_THRESHOLD | 0.85 | Minimum citation accuracy score to pass |
+| RELEVANCE_THRESHOLD | 0.70 | Minimum relevance score to pass |
+| MAX_REGENERATIONS | 2 | Max times Critic rejects before accepting |
+| CHROMA_DB_PATH | ./data/chroma_db | ChromaDB storage directory |
+| BM25_INDEX_PATH | ./data/bm25_index.pkl | BM25 index file |
+| SESSIONS_DB_PATH | ./data/sessions.db | SQLite sessions database |
+
+---
+
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | /api/ingest | Upload PDF/DOCX/TXT — runs full ingestion pipeline |
+| POST | /api/query | One-shot query — runs agent pipeline, returns answer + scores |
+| GET | /api/documents | List all ingested documents with chunk counts |
+| DELETE | /api/documents/{doc_id} | Remove document and all its chunks from ChromaDB |
+| POST | /api/sessions | Create a new research session |
+| GET | /api/sessions | List all sessions sorted by most recently updated |
+| GET | /api/sessions/{id} | Get session with full message history |
+| POST | /api/sessions/{id}/message | Send message — agent pipeline with conversation context |
+| DELETE | /api/sessions/{id} | Delete session and all its messages |
+| GET | /health | API status and knowledge base statistics |
+
+Full interactive documentation at http://localhost:8000/docs
+
+---
+
+## Tests
+
+86 tests total. All tests run in under 2 seconds — they test deterministic
+logic with no LLM calls, no network requests, and no file I/O.
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run by category
+python -m pytest tests/ingestion/ -v   # 44 tests
+python -m pytest tests/agents/ -v      # 42 tests
+```
+
+| File | Tests | Covers |
+|---|---|---|
+| tests/ingestion/test_parser.py | 7 | Parsing, heading detection, element classification |
+| tests/ingestion/test_chunker.py | 7 | Article-boundary chunking, overlap, doc_id generation |
+| tests/ingestion/test_embedder.py | 8 | E5 embedding, query/passage prefixes, semantic similarity |
+| tests/ingestion/test_vector_store.py | 10 | ChromaDB storage, search, metadata filtering, delete |
+| tests/ingestion/test_pipeline.py | 8 | End-to-end ingestion, duplicate handling, batch ingestion |
+| tests/agents/test_state.py | 5 | LexMindState creation and field defaults |
+| tests/agents/test_orchestrator.py | 8 | Query classification, JSON parsing, fallback handling |
+| tests/agents/test_reasoning_agent.py | 12 | Citation extraction, chunk formatting, prompt templates |
+| tests/agents/test_critic_agent.py | 10 | Score parsing, feedback composition, threshold checks |
+| tests/agents/test_graph.py | 7 | Routing logic, graph compilation, conditional edges |
+
+---
+
+## Key Design Decisions
+
+**Grounded answers only**
+The LLM is explicitly forbidden from using any knowledge outside the
+retrieved chunks. Every claim must be cited. If the document does not
+contain enough information the answer says so — it never halluminates.
+
+**Hybrid search**
+Dense vector search (E5-large) finds semantically similar chunks even
+when words differ. BM25 finds exact article references and specific terms.
+A cross-encoder then reranks the merged top-40 to select the best 5.
+
+**Critic loop**
+After the Reasoning Agent generates an answer the Critic scores it on
+three dimensions. If any score falls below its threshold the answer is
+rejected and regenerated with specific feedback — up to MAX_REGENERATIONS
+times (default 2). After that the best available answer is returned.
+
+**Session memory without polluting retrieval**
+Conversation history is passed to the Reasoning Agent for coherent
+follow-up answers. But retrieval always uses the raw question only.
+This prevents previous questions from biasing the vector search toward
+earlier topics.
+
+**Lazy loading**
+The E5 model (1.3 GB) loads only on the first ingestion call.
+ChromaDB connects only on the first request. Startup is instant.
+
+---
+
+## License
+
+MIT
+
+---
+
+*Built with LangGraph, FastAPI, ChromaDB, and Next.js*
