@@ -18,6 +18,7 @@ from src.ingestion.parser import DocumentParser
 from src.ingestion.chunker import LegalChunker
 from src.ingestion.embedder import DocumentEmbedder
 from src.ingestion.vector_store import VectorStore
+from src.ingestion.title_extractor import detect_document_title
 
 
 # ─── Result Dataclass ─────────────────────────────────────────
@@ -116,6 +117,8 @@ class IngestionPipeline:
         self,
         file_path: str,
         replace_existing: bool = True,
+        doc_title: Optional[str] = None,
+        original_filename: Optional[str] = None,
     ) -> IngestionResult:
         """
         Run the full ingestion pipeline on one document.
@@ -140,9 +143,11 @@ class IngestionPipeline:
         """
         path = Path(file_path)
         file_name = path.name
+        # Use original filename if provided (temp files have generated names)
+        display_name = original_filename or file_name
 
         logger.info(
-            f"Starting ingestion | file: {file_name}"
+            f"Starting ingestion | file: {display_name}"
         )
 
         try:
@@ -162,6 +167,26 @@ class IngestionPipeline:
                 f"{chunking_result.articles_found} article chunks"
             )
 
+            # ── Detect document title ─────────────────────────────
+            try:
+                from src.llm_client import get_llm
+                llm = get_llm()
+            except Exception:
+                llm = None
+
+            detected_title = detect_document_title(
+                elements=parsed_doc.elements,
+                file_name=file_name,
+                llm=llm,
+                user_provided=doc_title,
+            )
+            logger.info(f"  Document title: '{detected_title}'")
+
+            # Store title and original filename in chunk metadata
+            for chunk in chunking_result.chunks:
+                chunk.metadata["doc_title"] = detected_title
+                chunk.metadata["file_name"] = display_name
+
             # ── Check for existing document ───────────────────
             doc_id = chunking_result.doc_id
             if not replace_existing:
@@ -172,14 +197,14 @@ class IngestionPipeline:
                     )
                     return IngestionResult(
                         doc_id=doc_id,
-                        file_name=file_name,
+                        file_name=display_name,
                         chunks_created=0,
                         success=True,
                         metadata={"skipped": True, "reason": "already_exists"}
                     )
 
             # ── Station 3: Embed ──────────────────────────────
-            logger.info(f"Station 3/4 — Embedding {file_name}")
+            logger.info(f"Station 3/4 — Embedding {display_name}")
             embedding_result = self.embedder.embed_chunks(
                 chunking_result
             )
@@ -189,7 +214,7 @@ class IngestionPipeline:
             )
 
             # ── Station 4: Store ──────────────────────────────
-            logger.info(f"Station 4/4 — Storing {file_name}")
+            logger.info(f"Station 4/4 — Storing {display_name}")
             stored_count = self.vector_store.add_documents(
                 embedding_result,
                 replace_existing=replace_existing
@@ -200,12 +225,13 @@ class IngestionPipeline:
 
             result = IngestionResult(
                 doc_id=doc_id,
-                file_name=file_name,
+                file_name=display_name,
                 chunks_created=stored_count,
                 articles_found=chunking_result.articles_found,
                 total_chars=chunking_result.total_chars,
                 success=True,
                 metadata={
+                    "doc_title": detected_title,
                     "embedding_dim": embedding_result.embedding_dim,
                     "embedding_model": self.embedder.model_name,
                     "parser": parsed_doc.metadata.get("parser", "unknown"),
@@ -219,7 +245,7 @@ class IngestionPipeline:
             logger.error(f"File not found: {file_path}")
             return IngestionResult(
                 doc_id="",
-                file_name=file_name,
+                file_name=display_name,
                 success=False,
                 error=str(e)
             )
@@ -228,18 +254,18 @@ class IngestionPipeline:
             logger.error(f"Invalid file: {e}")
             return IngestionResult(
                 doc_id="",
-                file_name=file_name,
+                file_name=display_name,
                 success=False,
                 error=str(e)
             )
 
         except Exception as e:
             logger.error(
-                f"Ingestion failed for {file_name}: {e}"
+                f"Ingestion failed for {display_name}: {e}"
             )
             return IngestionResult(
                 doc_id="",
-                file_name=file_name,
+                file_name=display_name,
                 success=False,
                 error=str(e)
             )

@@ -6,7 +6,8 @@ Handles document upload and ingestion into ChromaDB.
 import tempfile
 import os
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from loguru import logger
 
 from src.api.schemas import IngestResponse
@@ -33,7 +34,8 @@ def get_pipeline() -> IngestionPipeline:
     description="Upload a PDF, DOCX, or TXT file to ingest into the knowledge base."
 )
 async def ingest_document(
-    file: UploadFile = File(..., description="Legal document to ingest")
+    file: UploadFile = File(..., description="Legal document to ingest"),
+    doc_title: Optional[str] = Form(None),
 ):
     """
     Upload and ingest a legal document.
@@ -68,7 +70,11 @@ async def ingest_document(
 
         # Run ingestion pipeline
         pipeline = get_pipeline()
-        result = pipeline.ingest(tmp_path)
+        result = pipeline.ingest(
+            tmp_path,
+            doc_title=doc_title or None,
+            original_filename=file.filename,
+        )
 
         if not result.success:
             raise HTTPException(
@@ -82,6 +88,7 @@ async def ingest_document(
             success=True,
             doc_id=result.doc_id,
             file_name=file.filename,
+            doc_title=result.metadata.get("doc_title", ""),
             chunks_created=result.chunks_created,
             articles_found=result.articles_found,
             total_chars=result.total_chars,

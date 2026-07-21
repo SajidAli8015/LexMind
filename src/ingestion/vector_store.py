@@ -188,16 +188,15 @@ class VectorStore:
 
             # ChromaDB only supports str, int, float, bool values
             meta = {
-                "doc_id": str(chunk.doc_id),
-                "file_name": str(
-                    chunk.metadata.get("file_name", "")
-                ),
+                "doc_id":      str(chunk.doc_id),
+                "file_name":   str(chunk.metadata.get("file_name", "")),
                 "article_ref": str(chunk.article_ref),
-                "chunk_type": str(chunk.chunk_type),
+                "chunk_type":  str(chunk.chunk_type),
                 "chunk_index": int(chunk.chunk_index),
                 "total_chunks": int(chunk.total_chunks),
                 "page_number": int(chunk.page_number),
-                "char_count": int(chunk.char_count),
+                "char_count":  int(chunk.char_count),
+                "doc_title":   str(chunk.metadata.get("doc_title", "")),
             }
             metadatas.append(meta)
 
@@ -313,6 +312,7 @@ class VectorStore:
                 char_count=int(meta.get("char_count", 0)),
                 metadata=meta,
             ))
+            # doc_title accessible via chunk.metadata.get('doc_title', '')
 
         search_results.sort(key=lambda x: x.score, reverse=True)
 

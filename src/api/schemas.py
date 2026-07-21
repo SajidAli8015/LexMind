@@ -14,6 +14,7 @@ class IngestResponse(BaseModel):
     success: bool
     doc_id: str
     file_name: str
+    doc_title: str = ""
     chunks_created: int
     articles_found: int
     total_chars: int
@@ -25,6 +26,7 @@ class IngestResponse(BaseModel):
                 "success": True,
                 "doc_id": "contract_abc_a1b2c3d4",
                 "file_name": "nda_2024.pdf",
+                "doc_title": "Non-Disclosure Agreement",
                 "chunks_created": 23,
                 "articles_found": 8,
                 "total_chars": 34500,

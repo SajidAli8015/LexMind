@@ -15,6 +15,8 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [docTitle, setDocTitle] = useState('');
+  const [detectedTitle, setDetectedTitle] = useState('');
 
   const handleFile = useCallback(async (file: File) => {
     const allowed = ['.pdf', '.docx', '.txt'];
@@ -37,7 +39,8 @@ export default function UploadPage() {
     }, 400);
 
     try {
-      const response = await ingestDocument(file);
+      const response = await ingestDocument(file, docTitle || undefined);
+      setDetectedTitle(response.doc_title || '');
       clearInterval(interval);
       setProgress(100);
       setTimeout(() => {
@@ -64,6 +67,8 @@ export default function UploadPage() {
     setError(null);
     setFileName(null);
     setProgress(0);
+    setDocTitle('');
+    setDetectedTitle('');
   };
 
   return (
@@ -108,6 +113,24 @@ export default function UploadPage() {
             if (file) handleFile(file);
           }} />
         </label>
+      )}
+
+      {/* Title input — shown after file is selected */}
+      {fileName && state === 'idle' && (
+        <div className="mt-4">
+          <label className="block text-xs font-medium text-slate-600 mb-1.5">
+            Document title
+            <span className="ml-1 text-slate-400 font-normal">
+              (optional — auto-detected if left empty)
+            </span>
+          </label>
+          <input
+            value={docTitle}
+            onChange={e => setDocTitle(e.target.value)}
+            placeholder="e.g. Saudi Labor Law, NDA Agreement 2024..."
+            className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
+          />
+        </div>
       )}
 
       {/* Uploading */}
@@ -156,6 +179,12 @@ export default function UploadPage() {
             <div>
               <p className="text-sm font-semibold text-slate-900">Document ingested</p>
               <p className="text-xs text-slate-400 mt-0.5">{result.file_name}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-slate-500">Title:</span>
+                <span className="text-xs font-medium text-slate-700">
+                  {detectedTitle || result.doc_title || result.file_name}
+                </span>
+              </div>
             </div>
           </div>
 

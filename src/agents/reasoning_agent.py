@@ -22,8 +22,10 @@ Answer the question using ONLY the contract excerpts provided below.
 STRICT RULES:
 1. Use ONLY information from the provided excerpts.
 2. Do NOT use any external legal knowledge or assumptions.
-3. Cite the article number in square brackets for every claim.
-   Example: "Either party may terminate [Article 47]."
+3. Cite BOTH the article number AND document name in square brackets.
+   The document name is shown in parentheses in each excerpt header.
+   Example: "Notice must be 30 days [Article 75 — Saudi Labor Law]."
+   Example: "A company needs 2 directors [Article 12 — Companies Law]."
 4. If the excerpts do not contain enough information to answer,
    say: "The provided excerpts do not contain information about this."
 5. Be concise and direct.
@@ -42,8 +44,8 @@ Analyse the question using ONLY the contract excerpts below.
 STRICT RULES:
 1. Use ONLY information from the provided excerpts.
 2. Do NOT use any external legal knowledge or assumptions.
-3. Cite the article number in square brackets for every claim.
-   Example: "The liability is capped at PKR 5,000,000 [Article 12]."
+3. Cite BOTH the article number AND document name in square brackets.
+   Example: "The employer is liable [Article 34 — Labor Law]."
 4. Structure your analysis with clear points.
 5. If evidence is insufficient, state this explicitly.
 
@@ -62,7 +64,8 @@ the contract excerpts provided below.
 STRICT RULES:
 1. Use ONLY information from the provided excerpts.
 2. Do NOT use any external legal knowledge or assumptions.
-3. Cite the article number in square brackets for every point.
+3. Cite BOTH the article number AND document name in square brackets.
+   Example: "Under the Labor Law [Article 75], notice is 30 days."
 4. Structure your comparison clearly (similarities / differences).
 5. Only compare what the excerpts explicitly state.
 
@@ -81,7 +84,8 @@ excerpts provided below.
 STRICT RULES:
 1. Use ONLY information from the provided excerpts.
 2. Do NOT add interpretation beyond what is stated.
-3. Cite the article number in square brackets for each point.
+3. Cite BOTH the article number AND document name in square brackets.
+   Example: "Workers get annual leave [Article 109 — Labor Law]."
 4. Cover all key points from the excerpts.
 5. Use clear, structured bullet points.
 
@@ -137,32 +141,37 @@ def get_prompt_template(query_type: str) -> str:
 
 def extract_citations(answer_text: str) -> List[str]:
     """
-    Parse article citations from the answer text.
-
-    Looks for patterns like:
-        [Article 47]
-        [Article 3.2]
-        [Section 12]
-        [Clause 5]
-        [Schedule 1]
-
-    Args:
-        answer_text: The LLM-generated answer
-
-    Returns:
-        Sorted list of unique citation strings
-        Example: ["Article 3", "Article 47", "Section 12"]
+    Parse citations from answer text.
+    Handles both formats:
+      [Article 75]
+      [Article 75 - Saudi Labor Law]
+      [Article 75 — Saudi Labor Law]
     """
-    full_pattern = r'\[((?:Article|Section|Clause|Schedule|Part)\s+[\dIVXivx]+(?:\.\d+)*)\]'
-    full_matches = re.findall(full_pattern, answer_text, re.IGNORECASE)
+    full_pattern = (
+        r'\[((?:Article|Section|Clause|Schedule|Part)'
+        r'\s+[\dIVXivx]+(?:\.\d+)*'
+        r'(?:\s*[—–-]+\s*[^\]]+)?)\]'
+    )
+    matches = re.findall(full_pattern, answer_text, re.IGNORECASE)
 
-    # Normalise: "article 47" → "Article 47"
     citations = []
-    for match in full_matches:
-        parts = match.strip().split()
-        if len(parts) >= 2:
-            normalised = f"{parts[0].capitalize()} {' '.join(parts[1:])}"
-            citations.append(normalised)
+    for match in matches:
+        match = match.strip()
+        for sep in [' — ', ' – ', ' - ', '—', '–']:
+            if sep in match:
+                parts = match.split(sep, 1)
+                article_part = parts[0].strip()
+                doc_part = parts[1].strip()
+                words = article_part.split()
+                if words:
+                    words[0] = words[0].capitalize()
+                citations.append(f"{' '.join(words)} — {doc_part}")
+                break
+        else:
+            words = match.split()
+            if words:
+                words[0] = words[0].capitalize()
+            citations.append(' '.join(words))
 
     return sorted(list(set(citations)))
 
@@ -171,27 +180,26 @@ def extract_citations(answer_text: str) -> List[str]:
 
 def format_chunks_for_prompt(chunks: List[SearchResult]) -> str:
     """
-    Format retrieved chunks into a readable context block
-    for the LLM prompt.
+    Format retrieved chunks into a readable context block.
+    Each chunk is labelled with its article ref AND document title
+    so the LLM can cite both in its answer.
 
-    Each chunk is labelled with its article reference and
-    chunk index for easy citation.
-
-    Args:
-        chunks: List of SearchResult objects
-
-    Returns:
-        Formatted string ready to insert into prompt
+    Example label: [Excerpt 1 — Article 75 (Saudi Labor Law)]
     """
     if not chunks:
         return "No relevant excerpts found."
 
     parts = []
     for i, chunk in enumerate(chunks, 1):
-        label = chunk.article_ref or f"Chunk {chunk.chunk_index}"
-        parts.append(
-            f"[Excerpt {i} — {label}]\n{chunk.text}"
-        )
+        article = chunk.article_ref or f"Chunk {chunk.chunk_index}"
+        doc_title = chunk.metadata.get('doc_title', '') if chunk.metadata else ''
+
+        if doc_title:
+            label = f"{article} ({doc_title})"
+        else:
+            label = article
+
+        parts.append(f"[Excerpt {i} — {label}]\n{chunk.text}")
 
     return "\n\n".join(parts)
 

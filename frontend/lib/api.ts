@@ -4,6 +4,7 @@ export interface IngestResponse {
   success: boolean;
   doc_id: string;
   file_name: string;
+  doc_title: string;
   chunks_created: number;
   articles_found: number;
   total_chars: number;
@@ -49,9 +50,15 @@ export interface HealthResponse {
   total_chunks: number;
 }
 
-export async function ingestDocument(file: File): Promise<IngestResponse> {
+export async function ingestDocument(
+  file: File,
+  docTitle?: string
+): Promise<IngestResponse> {
   const formData = new FormData();
   formData.append('file', file);
+  if (docTitle && docTitle.trim()) {
+    formData.append('doc_title', docTitle.trim());
+  }
   const response = await fetch(`${API_BASE}/api/ingest`, {
     method: 'POST',
     body: formData,
