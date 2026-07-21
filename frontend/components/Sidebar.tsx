@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, MessageSquare, FileText, Upload, Scale
+  LayoutDashboard, MessageSquare, FileText, Upload, Scale,
+  Loader2, CheckCircle, AlertCircle,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useUpload } from '@/contexts/UploadContext';
 
 const navItems = [
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard },
@@ -16,9 +18,11 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { status, fileName, progress } = useUpload();
 
   return (
     <aside className="fixed left-0 top-0 h-full w-60 bg-slate-900 text-white flex flex-col z-10">
+      {/* Logo */}
       <div className="px-5 py-5 border-b border-slate-700/60">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center">
@@ -31,6 +35,7 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/') && href !== '/';
@@ -52,6 +57,42 @@ export default function Sidebar() {
         })}
       </nav>
 
+      {/* Upload progress indicator */}
+      {status === 'uploading' && (
+        <div className="mx-3 mb-2 p-3 bg-slate-800 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2 mb-2">
+            <Loader2 className="w-3 h-3 text-blue-400 animate-spin shrink-0" />
+            <p className="text-xs text-slate-300 truncate">{fileName}</p>
+          </div>
+          <div className="w-full bg-slate-700 rounded-full h-1">
+            <div
+              className="bg-blue-500 h-1 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1">
+            Ingesting... {Math.round(progress)}%
+          </p>
+        </div>
+      )}
+
+      {status === 'success' && (
+        <div className="mx-3 mb-2 p-2.5 bg-green-900/30 rounded-lg border border-green-700/50 flex items-center gap-2">
+          <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+          <p className="text-[11px] text-green-300 truncate">
+            {fileName} ready
+          </p>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="mx-3 mb-2 p-2.5 bg-red-900/30 rounded-lg border border-red-700/50 flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+          <p className="text-[11px] text-red-300">Upload failed</p>
+        </div>
+      )}
+
+      {/* Footer */}
       <div className="px-5 py-4 border-t border-slate-700/60">
         <p className="text-[10px] text-slate-500">v0.2.0 · Phase 4</p>
       </div>
