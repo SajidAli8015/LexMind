@@ -12,6 +12,7 @@ from src.config import settings
 from src.graph.state import LexMindState
 from src.llm_client import get_llm
 from src.ingestion.vector_store import SearchResult
+from src.ingestion.number_utils import normalise_citations_in_brackets
 
 
 # ─── Prompt Templates ─────────────────────────────────────────
@@ -364,6 +365,12 @@ class ReasoningAgent:
 
         response = self.llm.invoke(prompt)
         answer = response.content.strip()
+
+        # Normalise written number citations to digits
+        # e.g. [Article Seventy-Five — Labor Law]
+        #    → [Article 75 — Labor Law]
+        answer = normalise_citations_in_brackets(answer)
+
         return answer, prompt
 
 
