@@ -61,3 +61,15 @@ htmlcov/
 # Temp files
 *.tmp
 *.temp
+
+# Docs — personal reference documents
+docs/*.pdf
+docs/*.docx
+docs/*.Rmd
+docs/*.doc
+docs/prompt*
+
+# Keep only screenshots folder
+!docs/screenshots/
+!docs/screenshots/*.png
+!docs/screenshots/*.jpg
