@@ -11,11 +11,10 @@
 
 ---
 
-## Screenshot
+## Dashboard
 
 ![LexMind Dashboard](docs/screenshots/dashboard.png)
 
-> Add your dashboard screenshot at `docs/screenshots/dashboard.png`
 
 ---
 
