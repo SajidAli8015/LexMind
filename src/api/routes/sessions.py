@@ -46,6 +46,37 @@ async def list_sessions(db: DBSession = Depends(get_db)):
     return [SessionResponse(**s.to_dict()) for s in sessions]
 
 
+@router.get(
+    "/sessions/recent-queries",
+    summary="Get recent queries across all sessions",
+)
+async def get_recent_queries(
+    limit: int = 10,
+    db: DBSession = Depends(get_db),
+):
+    """
+    Return the most recent user messages across all sessions.
+    Used by the Dashboard to show query history.
+    """
+    from src.db.models import Message
+    messages = (
+        db.query(Message)
+        .filter(Message.role == "user")
+        .order_by(Message.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": m.id,
+            "session_id": m.session_id,
+            "content": m.content,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in messages
+    ]
+
+
 @router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
 async def get_session(
     session_id: str,
@@ -132,6 +163,88 @@ async def send_message(
     except Exception as e:
         logger.error(f"Message failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/sessions/{session_id}/export",
+    summary="Export session as markdown",
+)
+async def export_session(
+    session_id: str,
+    db: DBSession = Depends(get_db),
+):
+    """
+    Export a research session as a markdown document.
+    Returns a markdown string with all Q&A and citations.
+    """
+    from fastapi.responses import Response
+    from datetime import datetime
+
+    session = db.query(Session).filter(
+        Session.id == session_id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    lines = []
+    lines.append(f"# {session.title}")
+    lines.append(f"")
+    if session.doc_name:
+        lines.append(f"**Document:** {session.doc_name}")
+    lines.append(
+        f"**Date:** {session.created_at.strftime('%B %d, %Y')}"
+    )
+    lines.append(f"**Messages:** {session.message_count}")
+    lines.append(f"")
+    lines.append("---")
+    lines.append("")
+
+    for msg in session.messages:
+        if msg.role == "user":
+            lines.append(f"## Q: {msg.content}")
+            lines.append("")
+        else:
+            lines.append(f"**Answer:**")
+            lines.append("")
+            lines.append(msg.content)
+            lines.append("")
+            import json
+            citations = []
+            if msg.citations:
+                try:
+                    citations = json.loads(msg.citations)
+                except Exception:
+                    pass
+            if citations:
+                lines.append(
+                    f"*Cited: {', '.join(citations)}*"
+                )
+                lines.append("")
+            scores = []
+            if msg.groundedness_score is not None:
+                scores.append(
+                    f"Grounded {int(msg.groundedness_score * 100)}%"
+                )
+            if msg.relevance_score is not None:
+                scores.append(
+                    f"Relevant {int(msg.relevance_score * 100)}%"
+                )
+            if scores:
+                lines.append(f"*Quality: {' · '.join(scores)}*")
+                lines.append("")
+            lines.append("---")
+            lines.append("")
+
+    markdown = "\n".join(lines)
+    filename = session.title.replace(" ", "_")[:50] + ".md"
+
+    return Response(
+        content=markdown,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
 
 
 @router.delete("/sessions/{session_id}")

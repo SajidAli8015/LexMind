@@ -6,7 +6,8 @@ import {
   FileText, Layers, Search, Upload,
   TrendingUp, AlertCircle, ArrowRight
 } from 'lucide-react';
-import { listDocuments, checkHealth, DocumentInfo } from '@/lib/api';
+import { listDocuments, checkHealth, DocumentInfo,
+         getRecentQueries, RecentQuery } from '@/lib/api';
 import clsx from 'clsx';
 
 function StatCard({
@@ -56,15 +57,18 @@ export default function DashboardPage() {
   const [totalChunks, setTotalChunks] = useState(0);
   const [loading, setLoading] = useState(true);
   const [apiStatus, setApiStatus] = useState<'ok' | 'degraded' | 'unknown'>('unknown');
+  const [recentQueries, setRecentQueries] = useState<RecentQuery[]>([]);
 
   useEffect(() => {
     Promise.all([
       listDocuments(),
       checkHealth(),
-    ]).then(([docsData, health]) => {
+      getRecentQueries(5),
+    ]).then(([docsData, health, queries]) => {
       setDocs(docsData.documents);
       setTotalChunks(docsData.total_chunks);
       setApiStatus(health.status as 'ok' | 'degraded');
+      setRecentQueries(queries);
     }).catch(() => {
       setApiStatus('degraded');
     }).finally(() => setLoading(false));
@@ -125,7 +129,7 @@ export default function DashboardPage() {
           <p className="font-medium text-slate-900 text-sm">Upload document</p>
           <p className="text-xs text-slate-400 mt-0.5">Add PDF, DOCX, or TXT to knowledge base</p>
         </Link>
-        <Link href="/query" className="group bg-white border border-slate-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-sm transition-all">
+        <Link href="/research" className="group bg-white border border-slate-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-sm transition-all">
           <div className="flex items-center justify-between mb-3">
             <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
               <Search className="w-4 h-4 text-green-500" />
@@ -186,6 +190,49 @@ export default function DashboardPage() {
                   Ready
                 </span>
               </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Queries */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-slate-700">
+            Recent queries
+          </h2>
+          <Link
+            href="/research"
+            className="text-xs text-blue-500 hover:text-blue-700"
+          >
+            New session →
+          </Link>
+        </div>
+
+        {recentQueries.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-6 text-center">
+            <Search className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">No queries yet</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {recentQueries.map((q, i) => (
+              <Link
+                key={q.id}
+                href={`/research?session=${q.session_id}`}
+                className={clsx(
+                  'flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors',
+                  i < recentQueries.length - 1 && 'border-b border-slate-100'
+                )}
+              >
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <p className="text-sm text-slate-700 truncate flex-1">
+                  {q.content}
+                </p>
+                <span className="text-[10px] text-slate-400 shrink-0">
+                  {new Date(q.created_at).toLocaleDateString()}
+                </span>
+              </Link>
             ))}
           </div>
         )}

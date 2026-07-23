@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Trash2, ExternalLink, FileText, AlertCircle, Loader2 } from 'lucide-react';
-import { listDocuments, deleteDocument, DocumentInfo } from '@/lib/api';
+import { Search, Trash2, ExternalLink, FileText, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { listDocuments, deleteDocument, reingestDocument, DocumentInfo } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 
@@ -30,6 +30,7 @@ export default function DocumentsPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [reingesting, setReingesting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [totalChunks, setTotalChunks] = useState(0);
 
@@ -69,8 +70,29 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleReingest = async (docId: string, fileName: string) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.docx,.txt';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      setReingesting(docId);
+      try {
+        await reingestDocument(docId, file);
+        await fetchDocs();
+        alert(`Successfully updated ${fileName}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Update failed');
+      } finally {
+        setReingesting(null);
+      }
+    };
+    input.click();
+  };
+
   const handleQuery = (docId: string) => {
-    router.push(`/query?doc_id=${docId}`);
+    router.push(`/research?doc_id=${docId}`);
   };
 
   return (
@@ -159,6 +181,18 @@ export default function DocumentsPage() {
               {/* Actions */}
               <div className="col-span-3 flex items-center justify-end gap-2">
                 <button
+                  onClick={() => handleReingest(doc.doc_id, doc.file_name)}
+                  disabled={reingesting === doc.doc_id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 border border-amber-100 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50"
+                >
+                  {reingesting === doc.doc_id ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  Update
+                </button>
+                <button
                   onClick={() => handleQuery(doc.doc_id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors"
                 >
@@ -166,7 +200,7 @@ export default function DocumentsPage() {
                   Query
                 </button>
                 <button
-                  onClick={() => handleDelete(doc.doc_id, doc.file_name)}
+                  onClick={e => { e.stopPropagation(); handleDelete(doc.doc_id, doc.file_name); }}
                   disabled={deleting === doc.doc_id}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
                 >

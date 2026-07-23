@@ -204,7 +204,7 @@ class IngestionPipeline:
                     )
 
             # ── Station 3: Embed ──────────────────────────────
-            logger.info(f"Station 3/4 — Embedding {display_name}")
+            logger.info(f"Station 3/5 — Embedding {display_name}")
             embedding_result = self.embedder.embed_chunks(
                 chunking_result
             )
@@ -214,7 +214,7 @@ class IngestionPipeline:
             )
 
             # ── Station 4: Store ──────────────────────────────
-            logger.info(f"Station 4/4 — Storing {display_name}")
+            logger.info(f"Station 4/5 — Storing {display_name}")
             stored_count = self.vector_store.add_documents(
                 embedding_result,
                 replace_existing=replace_existing
@@ -222,6 +222,23 @@ class IngestionPipeline:
             logger.info(
                 f"  Stored: {stored_count} chunks in ChromaDB"
             )
+
+            # ── Station 5: Rebuild BM25 index ─────────────────────
+            logger.info(f"Station 5/5 — Rebuilding BM25 index")
+            try:
+                from src.agents.retrieval_agent import BM25Index
+                bm25 = BM25Index()
+                indexed_count = bm25.build_from_vector_store(
+                    self.vector_store
+                )
+                logger.info(
+                    f"  BM25 index rebuilt: {indexed_count} chunks indexed"
+                )
+            except Exception as e:
+                # BM25 rebuild failure is non-fatal — dense search still works
+                logger.warning(
+                    f"  BM25 rebuild failed (non-fatal): {e}"
+                )
 
             result = IngestionResult(
                 doc_id=doc_id,
@@ -266,6 +283,66 @@ class IngestionPipeline:
             return IngestionResult(
                 doc_id="",
                 file_name=display_name,
+                success=False,
+                error=str(e)
+            )
+
+    def reingest(
+        self,
+        file_path: str,
+        doc_id: str,
+        doc_title: Optional[str] = None,
+        original_filename: Optional[str] = None,
+    ) -> IngestionResult:
+        """
+        Re-ingest an updated version of an existing document.
+
+        Deletes all old chunks for the given doc_id from ChromaDB,
+        then ingests the new file with the same doc_id if possible.
+
+        Args:
+            file_path:         Path to the new version of the document
+            doc_id:            The existing document ID to replace
+            doc_title:         Optional title override
+            original_filename: Original filename to display
+
+        Returns:
+            IngestionResult with updated chunk counts
+        """
+        path = Path(file_path)
+        file_name = original_filename or path.name
+
+        logger.info(
+            f"Re-ingesting document | "
+            f"doc_id={doc_id} | file={file_name}"
+        )
+
+        try:
+            # Delete old chunks first
+            deleted = self.vector_store.delete_document(doc_id)
+            logger.info(f"Deleted {deleted} old chunks for {doc_id}")
+
+            # Ingest new version
+            result = self.ingest(
+                file_path=file_path,
+                replace_existing=True,
+                doc_title=doc_title,
+                original_filename=original_filename,
+            )
+
+            if result.success:
+                logger.info(
+                    f"Re-ingestion complete | "
+                    f"new chunks={result.chunks_created}"
+                )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Re-ingestion failed: {e}")
+            return IngestionResult(
+                doc_id=doc_id,
+                file_name=file_name,
                 success=False,
                 error=str(e)
             )

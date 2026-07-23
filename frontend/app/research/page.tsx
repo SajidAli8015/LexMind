@@ -4,11 +4,11 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Plus, Send, Loader2, Trash2, MessageSquare,
-  ChevronDown, AlertCircle, BookOpen
+  ChevronDown, AlertCircle, BookOpen, Download
 } from 'lucide-react';
 import {
   createSession, listSessions, getSession,
-  sendMessage, deleteSession,
+  sendMessage, deleteSession, exportSession,
   SessionResponse, SessionDetailResponse,
   MessageResponse, listDocuments, DocumentInfo
 } from '@/lib/api';
@@ -170,6 +170,15 @@ function ResearchContent() {
     }
   };
 
+  const handleExport = async () => {
+    if (!activeSession) return;
+    try {
+      await exportSession(activeSession.id, activeSession.title);
+    } catch {
+      setError('Export failed');
+    }
+  };
+
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm('Delete this session and all its messages?')) return;
@@ -312,11 +321,21 @@ function ResearchContent() {
                   {activeSession.doc_name || 'All documents'} · {activeSession.message_count} messages
                 </p>
               </div>
-              {activeSession.doc_name && (
-                <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 rounded-full text-xs font-medium text-blue-700 truncate max-w-[200px]">
-                  {activeSession.doc_name}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {activeSession.doc_name && (
+                  <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 rounded-full text-xs font-medium text-blue-700 truncate max-w-[200px]">
+                    {activeSession.doc_name}
+                  </span>
+                )}
+                <button
+                  onClick={handleExport}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
+                  title="Export session as markdown"
+                >
+                  <Download className="w-3 h-3" />
+                  Export
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
