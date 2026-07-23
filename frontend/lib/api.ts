@@ -186,3 +186,59 @@ export async function deleteSession(id: string): Promise<void> {
   });
   if (!response.ok) throw new Error('Failed to delete session');
 }
+
+export interface RecentQuery {
+  id: string;
+  session_id: string;
+  content: string;
+  created_at: string;
+}
+
+export async function getRecentQueries(limit = 10): Promise<RecentQuery[]> {
+  const response = await fetch(
+    `${API_BASE}/api/sessions/recent-queries?limit=${limit}`
+  );
+  if (!response.ok) return [];
+  return response.json();
+}
+
+export async function exportSession(
+  sessionId: string,
+  title: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE}/api/sessions/${sessionId}/export`
+  );
+  if (!response.ok) throw new Error('Export failed');
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = title.replace(/\s+/g, '_').slice(0, 50) + '.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function reingestDocument(
+  docId: string,
+  file: File,
+  docTitle?: string
+): Promise<IngestResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (docTitle?.trim()) {
+    formData.append('doc_title', docTitle.trim());
+  }
+  const response = await fetch(
+    `${API_BASE}/api/documents/${docId}/reingest`,
+    { method: 'PUT', body: formData }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Failed' }));
+    throw new Error(error.detail || 'Re-ingest failed');
+  }
+  return response.json();
+}
