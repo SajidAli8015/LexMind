@@ -206,12 +206,17 @@ class VectorStore:
 
         for start in range(0, len(ids), batch_size):
             end = min(start + batch_size, len(ids))
-            collection.add(
-                ids=ids[start:end],
-                embeddings=embeddings[start:end],
-                documents=documents[start:end],
-                metadatas=metadatas[start:end]
-            )
+            try:
+                collection.add(
+                    ids=ids[start:end],
+                    embeddings=embeddings[start:end],
+                    documents=documents[start:end],
+                    metadatas=metadatas[start:end]
+                )
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                raise
             total_added += end - start
 
         logger.info(

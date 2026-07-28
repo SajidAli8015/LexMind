@@ -172,6 +172,10 @@ LexMind/
 │   └── db/
 │       ├── database.py            # SQLAlchemy engine and session factory
 │       └── models.py              # Session and Message ORM models
+├── cli/
+│   ├── ingest_cli.py          # Step-by-step ingestion inspector
+│   ├── query_cli.py           # Step-by-step query pipeline inspector
+│   └── api_client.py          # Shared HTTP helpers for API delegation
 ├── tests/
 │   ├── ingestion/                 # 44 tests
 │   └── agents/                    # 42 tests
@@ -306,6 +310,86 @@ Open http://localhost:3000
 | GET | /health | API status and knowledge base statistics |
 
 Full interactive documentation: http://localhost:8000/docs
+
+---
+
+## Developer CLI
+
+Two command-line scripts for inspecting the pipelines step by step.
+Each stage pauses so intermediate output can be examined before
+continuing — useful for understanding the system and debugging
+retrieval behaviour.
+
+### Ingestion inspector
+
+Walks through the five ingestion stations, printing what each produces:
+
+```bash
+python -m cli.ingest_cli --file "path/to/document.pdf"
+```
+
+| Flag | Description |
+|---|---|
+| `--file PATH` | Document to inspect (required) |
+| `--title TEXT` | Override the auto-detected document title |
+| `--station N` | Stop after station N (1–5) |
+| `--no-pause` | Run all stations without pausing |
+
+Per-station output includes parsed element counts by heading level,
+chunk boundaries with article references, embedding dimensions and
+timing, the ChromaDB metadata structure, and BM25 index statistics.
+A final table summarises counts and per-station timings.
+
+### Query inspector
+
+Runs a question through the agent pipeline and prints each stage:
+
+```bash
+python -m cli.query_cli --query "What is the notice period?"
+```
+
+| Flag | Description |
+|---|---|
+| `--query TEXT` | Question to ask (required) |
+| `--doc-id TEXT` | Restrict retrieval to a single document |
+| `--local-classify` | Run the Orchestrator locally to show classification (costs one extra LLM call) |
+| `--api-url URL` | Backend base URL (default `http://localhost:8000`) |
+| `--no-pause` | Run all steps without pausing |
+
+Output covers the detected query type, the number of chunks retrieved,
+the generated answer with extracted citations, and all three critic
+scores checked against their thresholds. A final table summarises the
+run.
+
+To inspect the individual retrieved chunks and their relevance scores,
+use `POST /api/query` in the Swagger UI at
+`http://localhost:8000/docs`.
+
+### Prerequisites
+
+The backend must be running for the query inspector:
+
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
+
+Both scripts operate on documents already in the knowledge base.
+Ingest documents through the web interface at
+`http://localhost:3000/upload`, or via the API:
+
+```bash
+curl -X POST http://localhost:8000/api/ingest \
+  -F "file=@document.pdf" \
+  -F "doc_title=Labor Law"
+```
+
+### Platform note
+
+On Windows, ChromaDB's native vector library is only stable inside the
+uvicorn server process. The CLI scripts therefore run parsing,
+chunking, and embedding locally, and treat vector-store operations as
+read-only inspection — document writes and vector queries are handled
+by the API. On Linux and macOS this restriction does not apply.
 
 ---
 
